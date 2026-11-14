@@ -20,21 +20,21 @@ std::string RecoveryEngine::BuildOutputPath(const FileRecord& rec,
     char destinationRoot[MAX_PATH]{};
     if (pathLength == 0 || pathLength >= MAX_PATH ||
         !GetVolumePathNameA(absolutePath, destinationRoot, MAX_PATH)) {
-        std::cerr << "[!] Cannot determine the destination volume. Use a valid local path.\\n";
+        std::cerr << "[!] Cannot determine the destination volume. Use a valid local path.\n";
         return {};
     }
 
-    const std::string sourceRoot = drive_.GetDriveLetter() + "\\\\";
+    const std::string sourceRoot = drive_.GetDriveLetter() + "\\";
     char sourceVolume[MAX_PATH]{}, destinationVolume[MAX_PATH]{};
     if (!GetVolumeNameForVolumeMountPointA(
             sourceRoot.c_str(), sourceVolume, MAX_PATH) ||
         !GetVolumeNameForVolumeMountPointA(
             destinationRoot, destinationVolume, MAX_PATH)) {
-        std::cerr << "[!] Cannot verify source and destination volume identities.\\n";
+        std::cerr << "[!] Cannot verify source and destination volume identities.\n";
         return {};
     }
     if (_stricmp(sourceVolume, destinationVolume) == 0) {
-        std::cerr << "[!] Recovery destination must be on a different volume from the source.\\n";
+        std::cerr << "[!] Recovery destination must be on a different volume from the source.\n";
         return {};
     }
 
