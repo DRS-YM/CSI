@@ -11,7 +11,7 @@ The application opens a selected Windows volume for read access, parses FAT32 fi
 ## Current capabilities visible in the source
 
 - Open a Windows volume through the Win32 API using read access.
-- Read the FAT32 boot sector and the first FAT table.
+- Read and validate FAT32 boot-sector metadata and the selected active FAT.
 - Parse directory entries and identify entries marked with the FAT deleted-entry marker.
 - List deleted entries or all discovered files in the console.
 - Attempt recovery of one, selected, or all deleted files.
@@ -54,7 +54,7 @@ See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the component rel
 
 The project targets **Windows** and requires a C++17 compiler, CMake, and the Windows SDK.
 
-The current `CMakeLists.txt` references `src/main.cpp` and an `include` directory, but the tracked source files currently reside in the repository root. Consequently, the checked-in build configuration and repository layout do not currently agree. Correct that mismatch before expecting a successful CMake build; no successful clean build is claimed here.
+The source files are stored in the repository root, and the updated CMake configuration now builds that layout. A Windows Release build using MSVC and CMake completed successfully in the GitHub Actions workflow for this branch.
 
 After the build paths are aligned, a typical CMake workflow is:
 
@@ -63,7 +63,7 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-The executable needs sufficient Windows privileges to open a volume handle. Run only against storage devices you own or are explicitly authorized to examine.
+The executable needs sufficient Windows privileges to open a volume handle. Run only against storage devices you own or are explicitly authorized to examine. The [Windows build workflow](.github/workflows/windows-build.yml) automatically configures and builds the project on Windows for pushes and pull requests.
 
 ## Important forensic and recovery limitations
 
