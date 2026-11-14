@@ -32,7 +32,7 @@ main.cpp
 
 ## Build configuration correction
 
-The source files are currently stored in the repository root. The previous CMake configuration pointed to a non-existent `src/` folder and `include/` directory. The documentation branch updates CMake to compile the root-level source files and link the Windows BCrypt library.
+The source files are currently stored in the repository root. The previous CMake configuration pointed to a non-existent `src/` folder and `include/` directory. CMake now compiles the root-level source files, links Windows BCrypt, and defines `NOMINMAX` to prevent Win32 macro collisions.
 
 Build on Windows with CMake and a supported C++17 toolchain:
 
@@ -41,7 +41,7 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-This repository has not been built in a Windows environment during this review, so a successful compile is not yet confirmed.
+A Windows Release build using MSVC completed successfully through the GitHub Actions workflow. This confirms compilation and linking; it does not replace runtime tests against FAT32 media or disk images.
 
 ## Important implementation limitations
 
@@ -61,7 +61,7 @@ This repository has not been built in a Windows environment during this review, 
 - Implement LFN reconstruction and preserve full relative paths.
 - Add a recovery strategy for deleted entries with unavailable FAT chains, clearly labeling heuristic results.
 - Add unit tests using disposable FAT32 images and known file hashes.
-- Record failures in the audit log instead of silently omitting incomplete attempts.
+- Add richer recovery diagnostics and record every failure path in the audit log.
 
 ## Safety
 
