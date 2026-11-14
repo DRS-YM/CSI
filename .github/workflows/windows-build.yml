@@ -1,0 +1,24 @@
+name: Windows C++ Build
+
+on:
+  push:
+    branches:
+      - main
+      - docs/professional-documentation
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
