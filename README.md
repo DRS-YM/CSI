@@ -56,7 +56,7 @@ The project targets **Windows** and requires a C++17 compiler, CMake, and the Wi
 
 The project source files are organized under `src/`, with public headers under `include/`. CMake is configured for this layout. A Windows Release build using MSVC and CMake completed successfully in the GitHub Actions workflow for this branch.
 
-After the build paths are aligned, a typical CMake workflow is:
+Build locally with:
 
 ```powershell
 cmake -S . -B build
