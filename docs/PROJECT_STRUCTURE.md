@@ -19,20 +19,20 @@ main.cpp
 
 | File | Purpose |
 | --- | --- |
-| `main.cpp` | Collects case details, initializes the components, runs the menu, and writes reports |
-| `DriveManager.h/.cpp` | Manages the raw Windows volume handle and offset-based reads |
-| `FAT32Analyzer.h/.cpp` | Reads the boot sector and FAT, scans directories, and attempts file extraction |
-| `FileRecord.h` | Represents a discovered file or directory and formats its size |
-| `RecoveryEngine.h/.cpp` | Selects files for recovery, hashes source and output bytes, and records results |
-| `HashCalculator.h/.cpp` | Streams file data through Windows CNG to calculate MD5 or SHA-256 |
-| `AuditLogger.h/.cpp` | Stores recovery events and writes text, CSV, and JSON reports |
-| `UI.h/.cpp` | Lists entries and handles the user's recovery selections |
+| `src/main.cpp` | Collects case details, initializes the components, runs the menu, and writes reports |
+| `include/DriveManager.h` / `src/DriveManager.cpp` | Manages the raw Windows volume handle and offset-based reads |
+| `include/FAT32Analyzer.h` / `src/FAT32Analyzer.cpp` | Reads the boot sector and FAT, scans directories, and attempts file extraction |
+| `include/FileRecord.h` | Represents a discovered file or directory and formats its size |
+| `include/RecoveryEngine.h` / `src/RecoveryEngine.cpp` | Selects files for recovery, hashes source and output bytes, and records results |
+| `include/HashCalculator.h` / `src/HashCalculator.cpp` | Streams file data through Windows CNG to calculate MD5 or SHA-256 |
+| `include/AuditLogger.h` / `src/AuditLogger.cpp` | Stores recovery events and writes text, CSV, and JSON reports |
+| `include/UI.h` / `src/UI.cpp` | Lists entries and handles the user's recovery selections |
 | `CMakeLists.txt` | Defines the Windows-only C++17 build |
 | `.gitignore` | Excludes build outputs and temporary files |
 
 ## Build configuration correction
 
-The source files are currently stored in the repository root. The previous CMake configuration pointed to a non-existent `src/` folder and `include/` directory. CMake now compiles the root-level source files, links Windows BCrypt, and defines `NOMINMAX` to prevent Win32 macro collisions.
+Implementation files live in `src/`, and public headers live in `include/`. The previous CMake configuration pointed to a non-existent `src/` folder and `include/` directory. CMake now compiles the files in `src/`, includes headers from `include/`, links Windows BCrypt, and defines `NOMINMAX` to prevent Win32 macro collisions.
 
 Build on Windows with CMake and a supported C++17 toolchain:
 
