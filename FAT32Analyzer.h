@@ -47,7 +47,7 @@ private:
 
     bool LoadBootSector();
     bool LoadFATTable();
-    void ScanDirectory(uint32_t cluster, const std::string& parentPath);
+    bool ScanDirectory(uint32_t cluster, const std::string& parentPath);
     bool ReadCluster(uint32_t cluster, std::vector<uint8_t>& buffer);
     bool IsValidCluster(uint32_t cluster) const;
     std::string ParseName(const FAT32DirEntry& entry) const;
