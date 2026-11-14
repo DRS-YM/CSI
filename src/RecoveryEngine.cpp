@@ -18,9 +18,18 @@ std::string RecoveryEngine::BuildOutputPath(const FileRecord& rec,
     char absolutePath[MAX_PATH]{};
     const DWORD pathLength = GetFullPathNameA(
         outDir.c_str(), MAX_PATH, absolutePath, nullptr);
+    if (pathLength == 0 || pathLength >= MAX_PATH) return {};
+    fs::path existingPath(absolutePath);
+    std::error_code pathError;
+    while (!fs::exists(existingPath, pathError)) {
+        pathError.clear();
+        const fs::path parent = existingPath.parent_path();
+        if (parent.empty() || parent == existingPath) return {};
+        existingPath = parent;
+    }
     char destinationRoot[MAX_PATH]{};
-    if (pathLength == 0 || pathLength >= MAX_PATH ||
-        !GetVolumePathNameA(absolutePath, destinationRoot, MAX_PATH)) {
+    const std::string existingPathText = existingPath.string();
+    if (!GetVolumePathNameA(existingPathText.c_str(), destinationRoot, MAX_PATH)) {
         std::cerr << "[!] Cannot determine the destination volume. Use a valid local path.\n";
         return {};
     }
