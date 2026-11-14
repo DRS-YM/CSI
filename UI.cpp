@@ -1,84 +1,112 @@
 #include "UI.h"
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include <vector>
 
 void UI::ListFiles(bool onlyDeleted) const {
-    const auto& recs = fs_.GetRecords();
-
+    const auto& records = fs_.GetRecords();
     std::cout << "\n" << std::string(78, '=') << "\n"
-              << std::left
-              << std::setw(5)  << "#"
-              << std::setw(30) << "Name"
-              << std::setw(12) << "Size"
-              << std::setw(12) << "Cluster"
-              << std::setw(10) << "Status" << "\n"
+              << std::left << std::setw(5) << "#"
+              << std::setw(30) << "Name" << std::setw(12) << "Size"
+              << std::setw(12) << "Cluster" << std::setw(10) << "Status" << "\n"
               << std::string(78, '-') << "\n";
 
-    int shown = 0;
-    for (size_t i = 0; i < recs.size(); ++i) {
-        const auto& r = recs[i];
-        if (onlyDeleted && !r.isDeleted) continue;
-        if (r.isDirectory) continue;
-
-        std::cout << std::left
-                  << std::setw(5)  << (i + 1)
-                  << std::setw(30) << r.FullName().substr(0, 29)
-                  << std::setw(12) << r.ReadableSize()
-                  << std::setw(12) << r.startCluster
-                  << std::setw(10) << (r.isDeleted ? "DELETED" : "OK")
-                  << "\n";
+    size_t shown = 0;
+    for (size_t i = 0; i < records.size(); ++i) {
+        const auto& record = records[i];
+        if ((onlyDeleted && !record.isDeleted) || record.isDirectory) continue;
+        std::cout << std::left << std::setw(5) << (i + 1)
+                  << std::setw(30) << record.FullName().substr(0, 29)
+                  << std::setw(12) << record.ReadableSize()
+                  << std::setw(12) << record.startCluster
+                  << std::setw(10) << (record.isDeleted ? "DELETED" : "OK") << "\n";
         ++shown;
     }
-    std::cout << std::string(78, '=') << "\n"
-              << "Total: " << shown << " file(s)\n";
+    std::cout << std::string(78, '=') << "\nTotal: " << shown << " file(s)\n";
 }
 
 void UI::HandleRecoverAll() {
-    std::string out;
-    std::cout << "Output directory (e.g. ./Recovered): ";
-    std::cin >> out;
-    engine_.RecoverAll(out);
+    std::string output;
+    std::cout << "Output directory: ";
+    if (!std::getline(std::cin >> std::ws, output) || output.empty()) {
+        std::cout << "[!] Output directory is required.\n";
+        return;
+    }
+    engine_.RecoverAll(output);
 }
 
 void UI::HandleRecoverSelected() {
-    std::cout << "Enter file numbers (space-separated, 0 to finish):\n";
-    std::vector<size_t> ids;
-    int x;
-    while (std::cin >> x && x != 0) ids.push_back(x - 1);
+    std::cout << "Enter file numbers (one per line; 0 to finish):\n";
+    std::vector<size_t> indices;
+    while (true) {
+        int value = 0;
+        if (!(std::cin >> value)) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "[!] Invalid number; selection cancelled.\n";
+            return;
+        }
+        if (value == 0) break;
+        if (value < 0) {
+            std::cout << "[!] File numbers must be positive. Try again or enter 0.\n";
+            continue;
+        }
+        indices.push_back(static_cast<size_t>(value - 1));
+    }
+    if (indices.empty()) {
+        std::cout << "[i] No files selected.\n";
+        return;
+    }
 
-    std::string out;
+    std::string output;
     std::cout << "Output directory: ";
-    std::cin >> out;
-    engine_.RecoverMany(ids, out);
+    if (!std::getline(std::cin >> std::ws, output) || output.empty()) {
+        std::cout << "[!] Output directory is required.\n";
+        return;
+    }
+    engine_.RecoverMany(indices, output);
 }
 
 void UI::HandleRecoverByIndex() {
-    int idx;
-    std::cout << "File #: ";
-    std::cin >> idx;
-    std::string out;
+    int value = 0;
+    std::cout << "File number: ";
+    if (!(std::cin >> value) || value <= 0) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cout << "[!] Enter a valid positive file number.\n";
+        return;
+    }
+
+    std::string output;
     std::cout << "Output directory: ";
-    std::cin >> out;
-    engine_.RecoverOne(idx - 1, out);
+    if (!std::getline(std::cin >> std::ws, output) || output.empty()) {
+        std::cout << "[!] Output directory is required.\n";
+        return;
+    }
+    engine_.RecoverOne(static_cast<size_t>(value - 1), output);
 }
 
 void UI::ShowMenu() {
     while (true) {
-        std::cout << "\n===== File Recovery Tool (FAT32) =====\n"
+        std::cout << "\n===== FAT32 File Recovery Tool =====\n"
                   << " 1) List deleted files\n"
                   << " 2) List all files\n"
-                  << " 3) Recover ALL deleted files\n"
+                  << " 3) Recover all deleted files\n"
                   << " 4) Recover selected files\n"
-                  << " 5) Recover single file by #\n"
-                  << " 0) Exit\n"
-                  << "Choice: ";
+                  << " 5) Recover one file by number\n"
+                  << " 0) Exit\nChoice: ";
+        int choice = -1;
+        if (!(std::cin >> choice)) {
+            if (std::cin.eof()) return;
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "[!] Please enter a menu number.\n";
+            continue;
+        }
 
-        int c;
-        if (!(std::cin >> c)) { std::cin.clear(); std::cin.ignore(10000,'\n'); continue; }
-
-        switch (c) {
-            case 1: ListFiles(true);  break;
+        switch (choice) {
+            case 1: ListFiles(true); break;
             case 2: ListFiles(false); break;
             case 3: HandleRecoverAll(); break;
             case 4: HandleRecoverSelected(); break;
