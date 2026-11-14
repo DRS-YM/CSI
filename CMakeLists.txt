@@ -5,18 +5,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Source files are currently stored in the repository root.
 add_executable(FileRecoveryTool
-    main.cpp
-    DriveManager.cpp
-    FAT32Analyzer.cpp
-    HashCalculator.cpp
-    RecoveryEngine.cpp
-    AuditLogger.cpp
-    UI.cpp
+    src/main.cpp
+    src/DriveManager.cpp
+    src/FAT32Analyzer.cpp
+    src/HashCalculator.cpp
+    src/RecoveryEngine.cpp
+    src/AuditLogger.cpp
+    src/UI.cpp
 )
 
-target_include_directories(FileRecoveryTool PRIVATE ".")
+target_include_directories(FileRecoveryTool PRIVATE include)
 # Prevent the Win32 min/max macros from breaking standard-library calls.
 target_compile_definitions(FileRecoveryTool PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
