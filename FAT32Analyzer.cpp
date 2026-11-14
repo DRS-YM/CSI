@@ -108,33 +108,41 @@ std::string FAT32Analyzer::ParseName(const FAT32DirEntry& e) const {
     return ext.empty() ? name : name + "." + ext;
 }
 
-void FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath) {
-    (void)parentPath; // Full relative paths are not yet represented in FileRecord.
-    if (!IsValidCluster(start) || directoryDepth >= 128 ||
-        !scannedDirectoryClusters.insert(start).second) {
-        if (directoryDepth >= 128)
-            std::cerr << "[!] Maximum directory nesting depth reached.\\n";
-        return;
+bool FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath) {
+    (void)parentPath; // FileRecord does not yet represent reconstructed paths.
+    if (!IsValidCluster(start)) return false;
+    if (scannedDirectoryClusters.count(start)) return true;
+    if (directoryDepth >= 128) {
+        std::cerr << "[!] Maximum directory nesting depth reached.\n";
+        return false;
     }
+    scannedDirectoryClusters.insert(start);
     ++directoryDepth;
     struct DepthGuard {
         uint32_t& depth;
         ~DepthGuard() { --depth; }
     } depthGuard{directoryDepth};
-    uint32_t cluster = start;
 
+    uint32_t cluster = start;
+    std::unordered_set<uint32_t> chain;
     for (uint32_t visited = 0; visited < totalClusters; ++visited) {
+        if (!IsValidCluster(cluster) || !chain.insert(cluster).second) {
+            std::cerr << "[!] Invalid or cyclic directory cluster chain.\n";
+            return false;
+        }
+
         std::vector<uint8_t> data;
         if (!ReadCluster(cluster, data)) {
             std::cerr << "[!] Failed to read directory cluster " << cluster << ".\n";
-            return;
+            return false;
         }
+
         const size_t count = data.size() / sizeof(FAT32DirEntry);
         for (size_t i = 0; i < count; ++i) {
             FAT32DirEntry e{};
             std::memcpy(&e, data.data() + i * sizeof(e), sizeof(e));
             const uint8_t first = static_cast<uint8_t>(e.name[0]);
-            if (first == 0x00) return;
+            if (first == 0x00) return true;
             if ((e.attributes & ATTR_LONG_NAME) == ATTR_LONG_NAME ||
                 (e.attributes & ATTR_VOLUME_ID)) continue;
             if (e.name[0] == '.' && (e.name[1] == ' ' || e.name[1] == '.')) continue;
@@ -144,21 +152,31 @@ void FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath)
             FileRecord r;
             r.name = ParseName(e);
             r.size = e.fileSize;
-            r.startCluster = (static_cast<uint32_t>(e.firstClusterHigh) << 16) | e.firstClusterLow;
+            r.startCluster = (static_cast<uint32_t>(e.firstClusterHigh) << 16) |
+                             e.firstClusterLow;
             r.parentCluster = cluster;
             r.isDeleted = deleted;
             r.isDirectory = directory;
             r.attributes = e.attributes;
             records.push_back(r);
 
-            if (directory && !deleted && IsValidCluster(r.startCluster))
-                ScanDirectory(r.startCluster, parentPath + r.name + "/");
+            if (directory && !deleted) {
+                if (!IsValidCluster(r.startCluster) ||
+                    !ScanDirectory(r.startCluster, parentPath + r.name + "/"))
+                    return false;
+            }
         }
+
         const uint32_t next = GetNextCluster(cluster);
-        if (next >= FAT32_EOC || !IsValidCluster(next)) return;
+        if (next >= FAT32_EOC) return true;
+        if (!IsValidCluster(next)) {
+            std::cerr << "[!] Directory chain ended on a free or invalid FAT entry.\n";
+            return false;
+        }
         cluster = next;
     }
-    std::cerr << "[!] Directory traversal limit reached (possible FAT loop).\n";
+    std::cerr << "[!] Directory traversal exceeded the volume cluster count.\n";
+    return false;
 }
 
 bool FAT32Analyzer::Parse() {
@@ -174,7 +192,10 @@ bool FAT32Analyzer::Parse() {
               << "    - Root Cluster     : " << bs.rootCluster << "\n"
               << "    - Total Clusters   : " << totalClusters << "\n"
               << "    - Volume Label     : " << std::string(bs.volumeLabel, 11) << "\n";
-    ScanDirectory(bs.rootCluster, "/");
+    if (!ScanDirectory(bs.rootCluster, "/")) {
+        std::cerr << "[!] Directory scan was incomplete; refusing to report a complete scan.\n";
+        return false;
+    }
     size_t deleted = 0;
     for (const auto& r : records) if (r.isDeleted && !r.isDirectory) ++deleted;
     std::cout << "[+] Scan complete: " << records.size()
