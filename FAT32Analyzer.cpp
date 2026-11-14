@@ -110,7 +110,17 @@ std::string FAT32Analyzer::ParseName(const FAT32DirEntry& e) const {
 
 void FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath) {
     (void)parentPath; // Full relative paths are not yet represented in FileRecord.
-    if (!IsValidCluster(start) || !scannedDirectoryClusters.insert(start).second) return;
+    if (!IsValidCluster(start) || directoryDepth >= 128 ||
+        !scannedDirectoryClusters.insert(start).second) {
+        if (directoryDepth >= 128)
+            std::cerr << "[!] Maximum directory nesting depth reached.\\n";
+        return;
+    }
+    ++directoryDepth;
+    struct DepthGuard {
+        uint32_t& depth;
+        ~DepthGuard() { --depth; }
+    } depthGuard{directoryDepth};
     uint32_t cluster = start;
 
     for (uint32_t visited = 0; visited < totalClusters; ++visited) {
@@ -155,6 +165,7 @@ bool FAT32Analyzer::Parse() {
     records.clear();
     fatCache.clear();
     scannedDirectoryClusters.clear();
+    directoryDepth = 0;
     if (!LoadBootSector() || !LoadFATTable()) return false;
 
     std::cout << "[+] FAT32 metadata validated.\n"
