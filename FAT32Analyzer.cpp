@@ -1,178 +1,213 @@
 #include "FAT32Analyzer.h"
-#include <iostream>
-#include <cstring>
-#include <fstream>
 #include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
+
+namespace { bool IsPowerOfTwo(uint32_t n) { return n && !(n & (n - 1)); } }
+
+bool FAT32Analyzer::IsValidCluster(uint32_t c) const {
+    return c >= 2 && static_cast<uint64_t>(c) < static_cast<uint64_t>(totalClusters) + 2;
+}
 
 bool FAT32Analyzer::LoadBootSector() {
-    std::vector<uint8_t> buffer(512);
-    if (!drive.ReadBytes(0, buffer.data(), 512)) return false;
-
-    memcpy(&bs, buffer.data(), sizeof(BootSector));
-
-    if (bs.bytesPerSector == 0 || bs.sectorsPerCluster == 0) return false;
-    if (bs.FATSize32 == 0) {
-        std::cerr << "[!] This is not a standard FAT32 drive.\n";
+    std::vector<uint8_t> sector(512);
+    if (!drive.ReadBytes(0, sector.data(), 512) ||
+        sector[510] != 0x55 || sector[511] != 0xAA) {
+        std::cerr << "[!] Cannot read a valid FAT boot sector.\n";
+        return false;
+    }
+    std::memcpy(&bs, sector.data(), sizeof(BootSector));
+    if (bs.bytesPerSector < 512 || bs.bytesPerSector > 4096 ||
+        !IsPowerOfTwo(bs.bytesPerSector) ||
+        !IsPowerOfTwo(bs.sectorsPerCluster) || bs.sectorsPerCluster > 128 ||
+        !bs.reservedSectorCount || !bs.numFATs || !bs.FATSize32 ||
+        bs.rootEntryCount != 0 || bs.FATSize16 != 0 || bs.fsVersion != 0) {
+        std::cerr << "[!] Invalid or unsupported FAT32 parameter block.\n";
         return false;
     }
 
-    clusterSize   = bs.bytesPerSector * bs.sectorsPerCluster;
-    fatOffset     = static_cast<uint64_t>(bs.reservedSectorCount)
-                    * bs.bytesPerSector;
-    dataOffset    = fatOffset
-                    + static_cast<uint64_t>(bs.numFATs) * bs.FATSize32
-                      * bs.bytesPerSector;
-    totalClusters = (bs.totalSectors32 -
-                     (bs.reservedSectorCount + bs.numFATs * bs.FATSize32))
-                    / bs.sectorsPerCluster;
+    const uint64_t sectors = bs.totalSectors32 ? bs.totalSectors32 : bs.totalSectors16;
+    const uint64_t fatSectors = bs.FATSize32;
+    const uint64_t firstData = static_cast<uint64_t>(bs.reservedSectorCount) +
+                               static_cast<uint64_t>(bs.numFATs) * fatSectors;
+    if (sectors <= firstData) return false;
 
+    clusterSize = static_cast<uint64_t>(bs.bytesPerSector) * bs.sectorsPerCluster;
+    totalClusters = static_cast<uint32_t>((sectors - firstData) / bs.sectorsPerCluster);
+    if (!totalClusters || !IsValidCluster(bs.rootCluster) ||
+        clusterSize > std::numeric_limits<uint32_t>::max()) return false;
+
+    fatOffset = static_cast<uint64_t>(bs.reservedSectorCount) * bs.bytesPerSector;
+    dataOffset = firstData * bs.bytesPerSector;
+    const uint64_t volumeBytes = sectors * bs.bytesPerSector;
+    const uint64_t fatBytes = fatSectors * bs.bytesPerSector;
+    if ((drive.GetDiskSize() && volumeBytes > drive.GetDiskSize()) ||
+        fatBytes > std::numeric_limits<uint32_t>::max() ||
+        fatBytes < (static_cast<uint64_t>(totalClusters) + 2) * 4 ||
+        dataOffset > volumeBytes ||
+        static_cast<uint64_t>(totalClusters) * clusterSize > volumeBytes - dataOffset) {
+        std::cerr << "[!] FAT32 geometry exceeds device or supported bounds.\n";
+        return false;
+    }
+
+    // Respect the selected FAT when mirroring is disabled.
+    uint32_t activeFat = 0;
+    if (bs.extFlags & 0x0080) {
+        activeFat = bs.extFlags & 0x000F;
+        if (activeFat >= bs.numFATs) return false;
+    }
+    fatOffset += static_cast<uint64_t>(activeFat) * fatBytes;
     return true;
 }
 
 bool FAT32Analyzer::LoadFATTable() {
-    uint64_t fatBytes = static_cast<uint64_t>(bs.FATSize32)
-                        * bs.bytesPerSector;
-    fatCache.resize(fatBytes);
-    return drive.ReadBytes(fatOffset, fatCache.data(),
-                           static_cast<uint32_t>(fatBytes));
+    const uint64_t bytes = static_cast<uint64_t>(bs.FATSize32) * bs.bytesPerSector;
+    if (!bytes || bytes > std::numeric_limits<uint32_t>::max()) return false;
+    fatCache.resize(static_cast<size_t>(bytes));
+    if (!drive.ReadBytes(fatOffset, fatCache.data(), static_cast<uint32_t>(bytes))) {
+        fatCache.clear();
+        return false;
+    }
+    return true;
 }
 
 uint32_t FAT32Analyzer::GetNextCluster(uint32_t cluster) {
-    uint64_t idx = static_cast<uint64_t>(cluster) * 4;
-    if (idx + 4 > fatCache.size()) return FAT32_EOC;
-    uint32_t val;
-    memcpy(&val, fatCache.data() + idx, 4);
-    return val & 0x0FFFFFFF;
+    if (!IsValidCluster(cluster)) return FAT32_EOC;
+    const uint64_t index = static_cast<uint64_t>(cluster) * 4;
+    if (index + 4 > fatCache.size()) return FAT32_EOC;
+    uint32_t value = 0;
+    std::memcpy(&value, fatCache.data() + index, sizeof(value));
+    return value & 0x0FFFFFFF;
 }
 
 uint64_t FAT32Analyzer::ClusterToOffset(uint32_t cluster) const {
-    if (cluster < 2) return 0;
+    if (!IsValidCluster(cluster)) return 0;
     return dataOffset + static_cast<uint64_t>(cluster - 2) * clusterSize;
 }
 
-std::vector<uint8_t> FAT32Analyzer::ReadCluster(uint32_t cluster) {
-    std::vector<uint8_t> buf(clusterSize);
-    drive.ReadBytes(ClusterToOffset(cluster), buf.data(),
-                    static_cast<uint32_t>(clusterSize));
-    return buf;
+bool FAT32Analyzer::ReadCluster(uint32_t cluster, std::vector<uint8_t>& buffer) {
+    if (!IsValidCluster(cluster)) return false;
+    buffer.resize(static_cast<size_t>(clusterSize));
+    const uint64_t offset = ClusterToOffset(cluster);
+    return offset && drive.ReadBytes(offset, buffer.data(), static_cast<uint32_t>(clusterSize));
 }
 
 std::string FAT32Analyzer::ParseName(const FAT32DirEntry& e) const {
-    std::string name;
+    std::string name, ext;
     for (int i = 0; i < 8 && e.name[i] != ' '; ++i) {
-        uint8_t c = static_cast<uint8_t>(e.name[i]);
-        if (c == DELETED_MARKER) name += '?';
-        else name += static_cast<char>(c);
+        const uint8_t c = static_cast<uint8_t>(e.name[i]);
+        name += c == DELETED_MARKER ? '?' : static_cast<char>(c);
     }
-    std::string ext;
     for (int i = 0; i < 3 && e.ext[i] != ' '; ++i) {
-        uint8_t c = static_cast<uint8_t>(e.ext[i]);
-        if (c == DELETED_MARKER) ext += '?';
-        else ext += static_cast<char>(c);
+        const uint8_t c = static_cast<uint8_t>(e.ext[i]);
+        ext += c == DELETED_MARKER ? '?' : static_cast<char>(c);
     }
-    if (!ext.empty()) name += "." + ext;
-    return name;
+    return ext.empty() ? name : name + "." + ext;
 }
 
-void FAT32Analyzer::ScanDirectory(uint32_t startCluster,
-                                  const std::string& parentPath) {
-    if (startCluster < 2) return;
+void FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath) {
+    (void)parentPath; // Full relative paths are not yet represented in FileRecord.
+    if (!IsValidCluster(start) || !scannedDirectoryClusters.insert(start).second) return;
+    uint32_t cluster = start;
 
-    uint32_t cluster = startCluster;
-
-    while (cluster >= 2 && cluster < FAT32_EOC) {
-        auto data = ReadCluster(cluster);
-        auto* entries = reinterpret_cast<FAT32DirEntry*>(data.data());
-        size_t entryCount = clusterSize / sizeof(FAT32DirEntry);
-
-        for (size_t i = 0; i < entryCount; ++i) {
-            const auto& e = entries[i];
-            uint8_t firstByte = static_cast<uint8_t>(e.name[0]);
-
-            if (firstByte == 0x00) return;
-            if ((e.attributes & ATTR_LONG_NAME) == ATTR_LONG_NAME) continue;
-            if (e.attributes & ATTR_VOLUME_ID) continue;
-
-            bool deleted = (firstByte == DELETED_MARKER);
-            bool isDir   = (e.attributes & ATTR_DIRECTORY) != 0;
-
-            if (e.name[0] == '.' && (e.name[1] == ' ' || e.name[1] == '.'))
-                continue;
-
-            FileRecord rec;
-            rec.name         = ParseName(e);
-            rec.size         = e.fileSize;
-            rec.startCluster = (static_cast<uint32_t>(e.firstClusterHigh) << 16)
-                               | e.firstClusterLow;
-            rec.parentCluster = cluster;
-            rec.isDeleted    = deleted;
-            rec.isDirectory  = isDir;
-            rec.attributes   = e.attributes;
-
-            records.push_back(rec);
-
-            if (isDir && !deleted && rec.startCluster >= 2) {
-                ScanDirectory(rec.startCluster,
-                              parentPath + rec.name + "/");
-            }
+    for (uint32_t visited = 0; visited < totalClusters; ++visited) {
+        std::vector<uint8_t> data;
+        if (!ReadCluster(cluster, data)) {
+            std::cerr << "[!] Failed to read directory cluster " << cluster << ".\n";
+            return;
         }
-        cluster = GetNextCluster(cluster);
+        const size_t count = data.size() / sizeof(FAT32DirEntry);
+        for (size_t i = 0; i < count; ++i) {
+            FAT32DirEntry e{};
+            std::memcpy(&e, data.data() + i * sizeof(e), sizeof(e));
+            const uint8_t first = static_cast<uint8_t>(e.name[0]);
+            if (first == 0x00) return;
+            if ((e.attributes & ATTR_LONG_NAME) == ATTR_LONG_NAME ||
+                (e.attributes & ATTR_VOLUME_ID)) continue;
+            if (e.name[0] == '.' && (e.name[1] == ' ' || e.name[1] == '.')) continue;
+
+            const bool deleted = first == DELETED_MARKER;
+            const bool directory = (e.attributes & ATTR_DIRECTORY) != 0;
+            FileRecord r;
+            r.name = ParseName(e);
+            r.size = e.fileSize;
+            r.startCluster = (static_cast<uint32_t>(e.firstClusterHigh) << 16) | e.firstClusterLow;
+            r.parentCluster = cluster;
+            r.isDeleted = deleted;
+            r.isDirectory = directory;
+            r.attributes = e.attributes;
+            records.push_back(r);
+
+            if (directory && !deleted && IsValidCluster(r.startCluster))
+                ScanDirectory(r.startCluster, parentPath + r.name + "/");
+        }
+        const uint32_t next = GetNextCluster(cluster);
+        if (next >= FAT32_EOC || !IsValidCluster(next)) return;
+        cluster = next;
     }
+    std::cerr << "[!] Directory traversal limit reached (possible FAT loop).\n";
 }
 
 bool FAT32Analyzer::Parse() {
     records.clear();
     fatCache.clear();
+    scannedDirectoryClusters.clear();
+    if (!LoadBootSector() || !LoadFATTable()) return false;
 
-    if (!LoadBootSector()) return false;
-    if (!LoadFATTable())   return false;
-
-    std::cout << "[+] FAT32 Parsed Successfully!\n"
+    std::cout << "[+] FAT32 metadata validated.\n"
               << "    - Bytes per Sector : " << bs.bytesPerSector << "\n"
               << "    - Cluster Size     : " << clusterSize << " bytes\n"
               << "    - Root Cluster     : " << bs.rootCluster << "\n"
               << "    - Total Clusters   : " << totalClusters << "\n"
-              << "    - Volume Label     : "
-              << std::string(bs.volumeLabel, 11) << "\n";
-
+              << "    - Volume Label     : " << std::string(bs.volumeLabel, 11) << "\n";
     ScanDirectory(bs.rootCluster, "/");
-
-    size_t deletedCount = 0;
-    for (const auto& r : records) if (r.isDeleted) ++deletedCount;
-
-    std::cout << "[+] Scan complete:\n"
-              << "    - Total entries    : " << records.size() << "\n"
-              << "    - Deleted files    : " << deletedCount << "\n";
+    size_t deleted = 0;
+    for (const auto& r : records) if (r.isDeleted && !r.isDirectory) ++deleted;
+    std::cout << "[+] Scan complete: " << records.size()
+              << " entries, " << deleted << " deleted files.\n";
     return true;
 }
 
-bool FAT32Analyzer::RecoverFile(const FileRecord& rec,
-                                const std::string& outputPath) {
-    if (rec.isDirectory) return false;
-    if (rec.size == 0)   return false;
-    if (rec.startCluster < 2) return false;
+bool FAT32Analyzer::RecoverFile(const FileRecord& rec, const std::string& outputPath) {
+    if (rec.isDirectory || rec.size == 0 || !IsValidCluster(rec.startCluster) || !clusterSize)
+        return false;
 
-    std::ofstream out(outputPath, std::ios::binary);
-    if (!out) {
-        std::cerr << "[!] Cannot create output: " << outputPath << "\n";
+    std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    uint64_t remaining = rec.size;
+    uint32_t cluster = rec.startCluster, visited = 0;
+    std::unordered_set<uint32_t> seen;
+    std::vector<uint8_t> buffer(static_cast<size_t>(clusterSize));
+    bool ok = true;
+
+    while (remaining) {
+        if (!IsValidCluster(cluster) || !seen.insert(cluster).second || visited++ >= totalClusters) {
+            ok = false;
+            break;
+        }
+        if (!drive.ReadBytes(ClusterToOffset(cluster), buffer.data(), static_cast<uint32_t>(clusterSize))) {
+            ok = false;
+            break;
+        }
+        const uint64_t amount = (std::min)(remaining, clusterSize);
+        out.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(amount));
+        if (!out) { ok = false; break; }
+        remaining -= amount;
+        if (!remaining) break;
+        const uint32_t next = GetNextCluster(cluster);
+        if (!IsValidCluster(next)) { ok = false; break; }
+        cluster = next;
+    }
+    out.close();
+    if (!out) ok = false;
+    if (!ok || remaining) {
+        std::error_code ec;
+        std::filesystem::remove(outputPath, ec);
+        std::cerr << "[!] Incomplete recovery; partial output removed. FAT chain may be missing or damaged.\n";
         return false;
     }
-
-    uint64_t remaining = rec.size;
-    uint32_t cluster   = rec.startCluster;
-    std::vector<uint8_t> buf(clusterSize);
-
-    while (remaining > 0 && cluster >= 2 && cluster < FAT32_EOC) {
-        uint64_t off = ClusterToOffset(cluster);
-        if (!drive.ReadBytes(off, buf.data(),
-                             static_cast<uint32_t>(clusterSize))) break;
-
-        uint64_t toWrite = (std::min)(remaining, clusterSize);
-        out.write(reinterpret_cast<const char*>(buf.data()), toWrite);
-        remaining -= toWrite;
-        cluster = GetNextCluster(cluster);
-    }
-
-    out.close();
-    return remaining == 0;
+    return true;
 }
