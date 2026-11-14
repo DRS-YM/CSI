@@ -20,6 +20,7 @@ bool FAT32Analyzer::LoadBootSector() {
         return false;
     }
     std::memcpy(&bs, sector.data(), sizeof(BootSector));
+    bs.rootCluster &= 0x0FFFFFFF;
     if (bs.bytesPerSector < 512 || bs.bytesPerSector > 4096 ||
         !IsPowerOfTwo(bs.bytesPerSector) ||
         !IsPowerOfTwo(bs.sectorsPerCluster) || bs.sectorsPerCluster > 128 ||
@@ -37,7 +38,8 @@ bool FAT32Analyzer::LoadBootSector() {
 
     clusterSize = static_cast<uint64_t>(bs.bytesPerSector) * bs.sectorsPerCluster;
     totalClusters = static_cast<uint32_t>((sectors - firstData) / bs.sectorsPerCluster);
-    if (!totalClusters || !IsValidCluster(bs.rootCluster) ||
+    if (!totalClusters || totalClusters > 0x0FFFFFF5 ||
+        !IsValidCluster(bs.rootCluster) ||
         clusterSize > std::numeric_limits<uint32_t>::max()) return false;
 
     fatOffset = static_cast<uint64_t>(bs.reservedSectorCount) * bs.bytesPerSector;
@@ -152,7 +154,7 @@ bool FAT32Analyzer::ScanDirectory(uint32_t start, const std::string& parentPath)
             FileRecord r;
             r.name = ParseName(e);
             r.size = e.fileSize;
-            r.startCluster = (static_cast<uint32_t>(e.firstClusterHigh) << 16) |
+            r.startCluster = ((static_cast<uint32_t>(e.firstClusterHigh) & 0x0FFF) << 16) |
                              e.firstClusterLow;
             r.parentCluster = cluster;
             r.isDeleted = deleted;
