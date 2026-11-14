@@ -1,22 +1,31 @@
-cmake_minimum_required(VERSION 3.15)
-project(FileRecoveryTool CXX)
+cmake_minimum_required(VERSION 3.20)
+project(FAT32FileRecoveryTool VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Source files are currently stored in the repository root.
 add_executable(FileRecoveryTool
-    src/main.cpp
-    src/DriveManager.cpp
-    src/HashCalculator.cpp
-    src/AuditLogger.cpp
-    src/FAT32Analyzer.cpp
-    src/RecoveryEngine.cpp
-    src/UI.cpp
+    main.cpp
+    DriveManager.cpp
+    FAT32Analyzer.cpp
+    HashCalculator.cpp
+    RecoveryEngine.cpp
+    AuditLogger.cpp
+    UI.cpp
 )
 
-target_include_directories(FileRecoveryTool PRIVATE include)
-target_link_libraries(FileRecoveryTool PRIVATE bcrypt)
+target_include_directories(FileRecoveryTool PRIVATE ".")
 
+if(WIN32)
+    target_link_libraries(FileRecoveryTool PRIVATE bcrypt)
+else()
+    message(FATAL_ERROR "FileRecoveryTool uses the Windows API and must be built on Windows.")
+endif()
 
-# إجبار المترجم على دمج مكتبات C++ الأساسية داخل البرنامج
-target_link_options(FileRecoveryTool PRIVATE "-static" "-static-libgcc" "-static-libstdc++")
+if(MSVC)
+    target_compile_options(FileRecoveryTool PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(FileRecoveryTool PRIVATE -Wall -Wextra -Wpedantic)
+endif()
