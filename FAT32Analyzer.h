@@ -8,49 +8,21 @@
 
 #pragma pack(push, 1)
 struct BootSector {
-    uint8_t jumpBoot[3];
-    char oemName[8];
-    uint16_t bytesPerSector;
-    uint8_t sectorsPerCluster;
-    uint16_t reservedSectorCount;
-    uint8_t numFATs;
-    uint16_t rootEntryCount;
-    uint16_t totalSectors16;
-    uint8_t media;
-    uint16_t FATSize16;
-    uint16_t sectorsPerTrack;
-    uint16_t numberOfHeads;
-    uint32_t hiddenSectors;
-    uint32_t totalSectors32;
-    uint32_t FATSize32;
-    uint16_t extFlags;
-    uint16_t fsVersion;
-    uint32_t rootCluster;
-    uint16_t fsInfoSector;
-    uint16_t backupBootSector;
-    uint8_t reserved[12];
-    uint8_t driveNumber;
-    uint8_t reserved1;
-    uint8_t bootSignature;
-    uint32_t volumeID;
-    char volumeLabel[11];
-    char fsType[8];
+    uint8_t jumpBoot[3]; char oemName[8]; uint16_t bytesPerSector;
+    uint8_t sectorsPerCluster; uint16_t reservedSectorCount; uint8_t numFATs;
+    uint16_t rootEntryCount; uint16_t totalSectors16; uint8_t media;
+    uint16_t FATSize16; uint16_t sectorsPerTrack; uint16_t numberOfHeads;
+    uint32_t hiddenSectors; uint32_t totalSectors32; uint32_t FATSize32;
+    uint16_t extFlags; uint16_t fsVersion; uint32_t rootCluster;
+    uint16_t fsInfoSector; uint16_t backupBootSector; uint8_t reserved[12];
+    uint8_t driveNumber; uint8_t reserved1; uint8_t bootSignature;
+    uint32_t volumeID; char volumeLabel[11]; char fsType[8];
 };
-
 struct FAT32DirEntry {
-    char name[8];
-    char ext[3];
-    uint8_t attributes;
-    uint8_t reserved;
-    uint8_t creationTimeTenth;
-    uint16_t creationTime;
-    uint16_t creationDate;
-    uint16_t lastAccessDate;
-    uint16_t firstClusterHigh;
-    uint16_t writeTime;
-    uint16_t writeDate;
-    uint16_t firstClusterLow;
-    uint32_t fileSize;
+    char name[8]; char ext[3]; uint8_t attributes; uint8_t reserved;
+    uint8_t creationTimeTenth; uint16_t creationTime; uint16_t creationDate;
+    uint16_t lastAccessDate; uint16_t firstClusterHigh; uint16_t writeTime;
+    uint16_t writeDate; uint16_t firstClusterLow; uint32_t fileSize;
 };
 #pragma pack(pop)
 
@@ -67,10 +39,8 @@ public:
 private:
     DriveManager& drive;
     BootSector bs{};
-    uint64_t fatOffset = 0;
-    uint64_t dataOffset = 0;
-    uint64_t clusterSize = 0;
-    uint32_t totalClusters = 0;
+    uint64_t fatOffset = 0, dataOffset = 0, clusterSize = 0;
+    uint32_t totalClusters = 0, directoryDepth = 0;
     std::vector<FileRecord> records;
     std::vector<uint8_t> fatCache;
     std::unordered_set<uint32_t> scannedDirectoryClusters;
