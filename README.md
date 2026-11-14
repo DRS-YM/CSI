@@ -33,18 +33,18 @@ These are source-code capabilities, not a claim that every recovery scenario suc
 
 ## Source layout
 
-The current repository keeps its C++ source and header files in the repository root:
+The project uses a conventional separation between public headers in `include/` and implementation files in `src/`:
 
 | File | Responsibility |
 | --- | --- |
-| `main.cpp` | Application entry point, case details, component setup, and report generation |
-| `DriveManager.h/.cpp` | Opens a volume and reads raw bytes at specified offsets |
-| `FAT32Analyzer.h/.cpp` | Reads FAT32 metadata, walks directory entries, and attempts file extraction |
-| `FileRecord.h` | Data model for discovered files and directories |
-| `RecoveryEngine.h/.cpp` | Coordinates recovery, hashes source and destination data, and records results |
-| `HashCalculator.h/.cpp` | Computes MD5 and SHA-256 hashes using Windows CNG |
-| `AuditLogger.h/.cpp` | Stores recovery events and writes TXT, CSV, and JSON reports |
-| `UI.h/.cpp` | Interactive console menu and file selection |
+| `src/main.cpp` | Application entry point, case details, component setup, and report generation |
+| `include/DriveManager.h` and `src/DriveManager.cpp` | Opens a volume and reads raw bytes at specified offsets |
+| `include/FAT32Analyzer.h` and `src/FAT32Analyzer.cpp` | Reads FAT32 metadata, walks directory entries, and attempts file extraction |
+| `include/FileRecord.h` | Data model for discovered files and directories |
+| `include/RecoveryEngine.h` and `src/RecoveryEngine.cpp` | Coordinates recovery, hashes source and destination data, and records results |
+| `include/HashCalculator.h` and `src/HashCalculator.cpp` | Computes MD5 and SHA-256 hashes using Windows CNG |
+| `include/AuditLogger.h` and `src/AuditLogger.cpp` | Stores recovery events and writes TXT, CSV, and JSON reports |
+| `include/UI.h` and `src/UI.cpp` | Interactive console menu and file selection |
 | `CMakeLists.txt` | CMake build configuration |
 | `.gitignore` | Excludes generated build files and temporary artifacts |
 
@@ -54,7 +54,7 @@ See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the component rel
 
 The project targets **Windows** and requires a C++17 compiler, CMake, and the Windows SDK.
 
-The source files are stored in the repository root, and the updated CMake configuration now builds that layout. A Windows Release build using MSVC and CMake completed successfully in the GitHub Actions workflow for this branch.
+The project source files are organized under `src/`, with public headers under `include/`. CMake is configured for this layout. A Windows Release build using MSVC and CMake completed successfully in the GitHub Actions workflow for this branch.
 
 After the build paths are aligned, a typical CMake workflow is:
 
