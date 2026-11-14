@@ -206,11 +206,19 @@ bool FAT32Analyzer::Parse() {
 }
 
 bool FAT32Analyzer::RecoverFile(const FileRecord& rec, const std::string& outputPath) {
-    if (rec.isDirectory || rec.size == 0 || !IsValidCluster(rec.startCluster) || !clusterSize)
-        return false;
-
+    if (rec.isDirectory || !clusterSize) return false;
     std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
     if (!out) return false;
+    if (rec.size == 0) {
+        out.close();
+        return static_cast<bool>(out);
+    }
+    if (!IsValidCluster(rec.startCluster)) {
+        out.close();
+        std::error_code ec;
+        std::filesystem::remove(outputPath, ec);
+        return false;
+    }
     uint64_t remaining = rec.size;
     uint32_t cluster = rec.startCluster, visited = 0;
     std::unordered_set<uint32_t> seen;
