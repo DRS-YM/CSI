@@ -17,6 +17,8 @@ add_executable(FileRecoveryTool
 )
 
 target_include_directories(FileRecoveryTool PRIVATE ".")
+# Prevent the Win32 min/max macros from breaking standard-library calls.
+target_compile_definitions(FileRecoveryTool PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
 if(WIN32)
     target_link_libraries(FileRecoveryTool PRIVATE bcrypt)
