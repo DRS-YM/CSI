@@ -24,9 +24,11 @@ bool DriveManager::Open(const std::string& requestedLetter) {
     letter[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(letter[0])));
     const std::string devicePath = "\\\\.\\" + letter;
 
+    driveLetter_ = letter;
     hDrive = CreateFileA(devicePath.c_str(), GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hDrive == INVALID_HANDLE_VALUE) {
+        driveLetter_.clear();
         std::cerr << "[!] Cannot open " << letter
                   << ". Windows error: " << GetLastError() << "\n";
         return false;
@@ -62,6 +64,7 @@ void DriveManager::Close() {
     }
     diskSize_ = 0;
     bytesPerSector_ = 512;
+    driveLetter_.clear();
 }
 
 bool DriveManager::ReadBytes(uint64_t offset, uint8_t* buffer, uint32_t size) {
