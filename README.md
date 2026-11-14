@@ -63,13 +63,23 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-The executable needs sufficient Windows privileges to open a volume handle. Run only against storage devices you own or are explicitly authorized to examine. The [Windows build workflow](.github/workflows/windows-build.yml) automatically configures and builds the project on Windows for pushes and pull requests.
+## Run the program
+
+From PowerShell in the repository directory:
+
+```powershell
+.\build\Release\FileRecoveryTool.exe
+```
+
+Enter the case details and source drive letter when prompted. Choose an audit-report directory on a different volume from the source. When recovering files from the menu, also choose a destination on a different volume. For example, if the source is `E:`, use `D:\RecoveryReports` for reports and `D:\RecoveredFiles` for recovered data. The application rejects destinations it can identify as the source volume.
+
+The executable may need to be run with sufficient Windows privileges to open a volume handle. Run only against storage devices you own or are explicitly authorized to examine. The [Windows build workflow](.github/workflows/windows-build.yml) automatically configures and builds the project on Windows for pushes and pull requests.
 
 ## Important forensic and recovery limitations
 
 - **FAT32 only:** the parser explicitly checks for FAT32 metadata. NTFS, exFAT, and other filesystems are outside the current implementation.
 - **Recovery is not guaranteed:** deleting a FAT32 directory entry may also release or alter its cluster-chain information. The current recovery path follows the FAT chain, so files whose chain has been cleared, reused, fragmented, or overwritten may be incomplete or unrecoverable.
-- **No forensic write blocker is implemented:** the application requests read access to the source volume, but this is not a substitute for a hardware write blocker and a validated forensic acquisition workflow.
+- **No forensic write blocker is implemented:** the application requests read access to the source volume and checks that report/recovery destinations are on another volume, but this is not a substitute for a hardware write blocker and a validated forensic acquisition workflow.
 - **Hash comparison has a limited meaning:** matching source and destination hashes supports byte-for-byte integrity for the bytes actually read and recovered. It does not prove that the recovered file is complete, authentic, or forensically admissible.
 - **MD5 is not collision-resistant:** it is included for compatibility/reporting; SHA-256 should be preferred for integrity verification.
 - **Testing is not documented:** the repository currently contains no visible automated test suite or supplied test images. Validate with disposable FAT32 media and known test files before any important use.
