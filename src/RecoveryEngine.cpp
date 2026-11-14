@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
+#include <string.h>
 #include <filesystem>
 #include <iostream>
 #include <unordered_set>
