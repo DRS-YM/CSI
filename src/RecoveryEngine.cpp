@@ -1,4 +1,5 @@
 #include "RecoveryEngine.h"
+#include <windows.h>
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -9,7 +10,34 @@ namespace fs = std::filesystem;
 
 std::string RecoveryEngine::BuildOutputPath(const FileRecord& rec,
                                             const std::string& outDir) const {
-    if (outDir.empty()) return {};
+    if (outDir.empty() || drive_.GetDriveLetter().empty()) return {};
+
+    // Never write recovered data back to the source volume: doing so can
+    // overwrite clusters that may still contain recoverable deleted data.
+    char absolutePath[MAX_PATH]{};
+    const DWORD pathLength = GetFullPathNameA(
+        outDir.c_str(), MAX_PATH, absolutePath, nullptr);
+    char destinationRoot[MAX_PATH]{};
+    if (pathLength == 0 || pathLength >= MAX_PATH ||
+        !GetVolumePathNameA(absolutePath, destinationRoot, MAX_PATH)) {
+        std::cerr << "[!] Cannot determine the destination volume. Use a valid local path.\\n";
+        return {};
+    }
+
+    const std::string sourceRoot = drive_.GetDriveLetter() + "\\\\";
+    char sourceVolume[MAX_PATH]{}, destinationVolume[MAX_PATH]{};
+    if (!GetVolumeNameForVolumeMountPointA(
+            sourceRoot.c_str(), sourceVolume, MAX_PATH) ||
+        !GetVolumeNameForVolumeMountPointA(
+            destinationRoot, destinationVolume, MAX_PATH)) {
+        std::cerr << "[!] Cannot verify source and destination volume identities.\\n";
+        return {};
+    }
+    if (_stricmp(sourceVolume, destinationVolume) == 0) {
+        std::cerr << "[!] Recovery destination must be on a different volume from the source.\\n";
+        return {};
+    }
+
     std::error_code error;
     fs::create_directories(outDir, error);
     if (error) return {};
