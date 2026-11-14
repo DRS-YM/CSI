@@ -83,7 +83,7 @@ bool AuditLogger::WriteTextReport() {
     if (!f) return false;
 
     f << "==========================================================\n";
-    f << "         DIGITAL FORENSICS - CHAIN OF CUSTODY REPORT      \n";
+    f << "         DIGITAL FORENSICS - RECOVERY AUDIT REPORT      \n";
     f << "==========================================================\n";
     f << "Case ID        : " << caseId_ << "\n";
     f << "Examiner       : " << examinerName_ << "\n";
