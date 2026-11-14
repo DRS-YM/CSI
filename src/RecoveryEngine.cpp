@@ -41,7 +41,13 @@ std::string RecoveryEngine::BuildOutputPath(const FileRecord& rec,
 bool RecoveryEngine::ComputeSourceHash(const FileRecord& rec,
                                        std::string& outMd5,
                                        std::string& outSha256) {
-    if (rec.size == 0 || fs_.GetClusterSize() == 0) return false;
+    if (rec.size == 0) {
+        outMd5 = "d41d8cd98f00b204e9800998ecf8427e";
+        outSha256 = "e3b0c44298fc1c149afbf4c8996fb924"
+                    "27ae41e4649b934ca495991b7852b855";
+        return true;
+    }
+    if (fs_.GetClusterSize() == 0) return false;
 
     const uint64_t clusterSize = fs_.GetClusterSize();
     uint64_t remaining = rec.size;
@@ -83,7 +89,7 @@ bool RecoveryEngine::RecoverOne(size_t index, const std::string& outDir) {
     const auto& records = fs_.GetRecords();
     if (index >= records.size()) return false;
     const FileRecord& rec = records[index];
-    if (rec.isDirectory || rec.size == 0) return false;
+    if (rec.isDirectory) return false;
 
     const std::string outPath = BuildOutputPath(rec, outDir);
     if (outPath.empty()) {
