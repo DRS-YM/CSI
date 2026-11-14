@@ -16,9 +16,11 @@ public:
 
     uint32_t GetBytesPerSector() const { return bytesPerSector_; }
     uint64_t GetDiskSize()       const { return diskSize_; }
+    const std::string& GetDriveLetter() const { return driveLetter_; }
 
 private:
     HANDLE   hDrive         = INVALID_HANDLE_VALUE;
     uint32_t bytesPerSector_ = 512;
     uint64_t diskSize_       = 0;
+    std::string driveLetter_;
 };

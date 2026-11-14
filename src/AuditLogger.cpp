@@ -30,26 +30,44 @@ std::string AuditLogger::TimestampString(
 }
 
 std::string AuditLogger::SafeFilePrefix() const {
-    return "Case_" + caseId_ + "_" + timestamp_;
+    std::string safe = caseId_;
+    for (char& ch : safe) {
+        const unsigned char c = static_cast<unsigned char>(ch);
+        if (c < 32 || ch == '<' || ch == '>' || ch == ':' || ch == '"' ||
+            ch == '/' || ch == '\\' || ch == '|' || ch == '?' || ch == '*')
+            ch = '_';
+    }
+    while (!safe.empty() && (safe.back() == '.' || safe.back() == ' '))
+        safe.pop_back();
+    if (safe.empty()) safe = "unspecified";
+    return "Case_" + safe + "_" + timestamp_;
 }
 
-std::string AuditLogger::EscapeJson(const std::string& s) {
-    std::string out;
-    for (char c : s) {
-        switch (c) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n";  break;
-            case '\r': out += "\\r";  break;
-            case '\t': out += "\\t";  break;
-            default:   out += c;
+std::string AuditLogger::EscapeJson(const std::string& value) {
+    static constexpr char hex[] = "0123456789abcdef";
+    std::string escaped;
+    for (unsigned char ch : value) {
+        switch (ch) {
+            case '"': escaped += "\\\""; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default:
+                if (ch < 0x20) {
+                    escaped += "\\u00";
+                    escaped += hex[ch >> 4];
+                    escaped += hex[ch & 0x0F];
+                } else {
+                    escaped += static_cast<char>(ch);
+                }
         }
     }
-    return out;
+    return escaped;
 }
 
 std::string AuditLogger::EscapeCsv(const std::string& s) {
-    if (s.find_first_of(",\"\n") == std::string::npos) return s;
+    if (s.find_first_of(",\"\r\n") == std::string::npos) return s;
     std::string out = "\"";
     for (char c : s) { if (c == '"') out += "\"\""; else out += c; }
     out += "\"";
@@ -65,7 +83,7 @@ bool AuditLogger::WriteTextReport() {
     if (!f) return false;
 
     f << "==========================================================\n";
-    f << "         DIGITAL FORENSICS - CHAIN OF CUSTODY REPORT      \n";
+    f << "         DIGITAL FORENSICS - RECOVERY AUDIT REPORT      \n";
     f << "==========================================================\n";
     f << "Case ID        : " << caseId_ << "\n";
     f << "Examiner       : " << examinerName_ << "\n";
